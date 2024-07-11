@@ -14,7 +14,6 @@ func ConnectDB() *sql.DB {
 	if err != nil {
 		log.Fatal("Connect to database error", err)
 	}
-	defer db.Close()
 
 	fmt.Println("okay")
 

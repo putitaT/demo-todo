@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -15,21 +17,35 @@ import (
 	"github.com/putitaT/todo-backend/database"
 )
 
+var db = database.ConnectDB()
+
+type TodoDB struct {
+	ID     int            `json:"id"`
+	Title  sql.NullString `json:"title"`
+	Status sql.NullString `json:"status"`
+}
+
+type Todo struct {
+	ID     int
+	Title  string
+	Status string
+}
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	r := gin.Default()
-	// r.LoadHTMLGlob("./*.html")
-	// r.GET("/", func(c *gin.Context) {
-	// 	c.HTML(http.StatusOK, "index.html", nil)
-	// })
 
-	r.GET("/todos", getTodoHandler)
+	// database.CreateTable()
 
-	// r.POST("/todos", postTodoHandler)
-
-	// r.DELETE("/todos/:id", deleteToDoHandler)
+	r.GET("/api/v1/todos", getTodosHandler)
+	r.GET("/api/v1/todos/:id", getTodoByIdHandler)
+	r.POST("/api/v1/todos", addTodoHandler)
+	r.PUT("/api/v1/todos/:id", editTodoHandler)
+	r.DELETE("/api/v1/todos/:id", deleteTodoHandler)
+	r.PATCH("/api/v1/todos/:id/actions/status", updateStatusHandler)
+	r.PATCH("/api/v1/todos/:id/actions/title", updateTitleHandler)
 
 	srv := http.Server{
 		Addr:    ":" + os.Getenv("PORT"),
@@ -62,7 +78,134 @@ func main() {
 	fmt.Println("bye")
 }
 
-func getTodoHandler(ctx *gin.Context) {
-	db := database.ConnectDB()
-	_ = db
+func getTodosHandler(ctx *gin.Context) {
+	rows, err := db.Query("SELECT id, title, status FROM todos")
+	if err != nil {
+		log.Fatal("can't query all todos", err)
+	}
+	todos := []Todo{}
+	for rows.Next() {
+		var t TodoDB
+		var todo Todo
+		err := rows.Scan(&t.ID, &t.Title, &t.Status)
+		if err != nil {
+			log.Fatal("can't Scan row into variable", err)
+		}
+
+		todo = mapResponse(t)
+
+		todos = append(todos, todo)
+	}
+	fmt.Println(todos)
+	ctx.JSON(http.StatusOK, todos)
+}
+
+func getTodoByIdHandler(ctx *gin.Context) {
+	rowId := ctx.Param("id")
+	q := "SELECT id, title, status FROM todos where id=$1"
+	row := db.QueryRow(q, rowId)
+
+	var t TodoDB
+	var todo Todo
+	err := row.Scan(&t.ID, &t.Title, &t.Status)
+	if err != nil {
+		log.Fatal("can't Scan row into variable", err)
+	}
+
+	todo = mapResponse(t)
+
+	ctx.JSON(http.StatusOK, todo)
+}
+
+func addTodoHandler(ctx *gin.Context) {
+	var newTodo Todo
+
+	if err := ctx.ShouldBindJSON(&newTodo); err != nil {
+		ctx.Error(err)
+	}
+
+	q := "INSERT INTO todos (title, status) values ($1, $2)  RETURNING id"
+	row := db.QueryRow(q, newTodo.Title, newTodo.Status)
+
+	var id int
+	err := row.Scan(&id)
+
+	if err != nil {
+		fmt.Println("can't scan id", err)
+		return
+	}
+
+	fmt.Println("insert todo success id : ", id)
+	ctx.JSON(http.StatusOK, id)
+
+}
+
+func editTodoHandler(ctx *gin.Context) {
+	rowId, _ := strconv.Atoi(ctx.Param("id"))
+	var editTodo Todo
+
+	if err := ctx.ShouldBindJSON(&editTodo); err != nil {
+		ctx.Error(err)
+	}
+
+	if _, err := db.Exec("UPDATE todos SET status=$2, title=$3 WHERE id=$1;", rowId, editTodo.Status, editTodo.Title); err != nil {
+		log.Fatal("error execute update ", err)
+	}
+
+	fmt.Println("update success")
+
+	ctx.JSON(http.StatusOK, Todo{ID: rowId, Status: editTodo.Status, Title: editTodo.Title})
+}
+
+func deleteTodoHandler(ctx *gin.Context) {
+	rowId := ctx.Param("id")
+
+	if _, err := db.Exec("DELETE FROM todos WHERE id=$1;", rowId); err != nil {
+		log.Fatal("error delete todo", err)
+	}
+
+	fmt.Println("delete success")
+	ctx.JSON(http.StatusOK, "Success")
+}
+
+func updateStatusHandler(ctx *gin.Context) {
+	rowId := ctx.Param("id")
+
+	var editTodo Todo
+
+	if err := ctx.ShouldBindJSON(&editTodo); err != nil {
+		ctx.Error(err)
+	}
+
+	if _, err := db.Exec("UPDATE todos SET status=$2 WHERE id=$1;", rowId, editTodo.Status); err != nil {
+		log.Fatal("error patch status todo", err)
+	}
+
+	fmt.Println("patch status success")
+	ctx.JSON(http.StatusOK, "Update Status Successful")
+}
+
+func updateTitleHandler(ctx *gin.Context) {
+	rowId := ctx.Param("id")
+
+	var editTodo Todo
+
+	if err := ctx.ShouldBindJSON(&editTodo); err != nil {
+		ctx.Error(err)
+	}
+
+	if _, err := db.Exec("UPDATE todos SET title=$2 WHERE id=$1;", rowId, editTodo.Title); err != nil {
+		log.Fatal("error patch title todo", err)
+	}
+
+	fmt.Println("patch title success")
+	ctx.JSON(http.StatusOK, "Update Title Successful")
+}
+
+func mapResponse(t TodoDB) Todo {
+	var todo Todo
+	todo.ID = t.ID
+	todo.Title = t.Title.String
+	todo.Status = t.Status.String
+	return todo
 }
