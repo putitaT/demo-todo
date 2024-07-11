@@ -100,13 +100,33 @@ function App() {
     }
   }
 
+  const handleChangeStatus = async (id, status) => {
+    const payload = { Status: status }
+    try {
+      const response = await fetch(`http://localhost:8091/api/v1/todos/${id}/actions/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      fetchData()
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
   return (
     <div className='bg-white rounded-2xl p-8 w-[500px]'>
       <div className='flex gap-4 items-center justify-between mb-5'>
-        <button className="btn btn-active btn-primary" onClick={() => {handleAddTodo()}}>Add</button>
+        <button className="btn btn-active btn-primary" onClick={() => { handleAddTodo() }}>Add</button>
         <label className="input input-bordered flex items-center gap-6 w-full">
           What to do?
-          <input type="text" className="grow" placeholder="write..." value={title} onChange={(e) => setTitle(e.target.value)}/>
+          <input type="text" className="grow" placeholder="write..." value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
       </div>
 
@@ -115,7 +135,7 @@ function App() {
         {todoList.map((e) => {
           return (
             e.isEdit ?
-              <div className='flex items-center gap-3 justify-between' key={e.ID}>
+              <div className='flex items-center gap-3 justify-between my-4' key={e.ID}>
                 <input type="text" className="input input-bordered w-full max-w-xs" value={editValue} onChange={(e) => setEditValue(e.target.value)} />
                 <div className='flex items-center gap-3'>
                   <button className="btn btn-active btn-ghost" onClick={() => handleUpdateTodo(e.ID)}>Save</button>
@@ -141,18 +161,17 @@ function App() {
                 </div>
               </div>
 
-              : <div className='flex align-center justify-between py-3'
-                onClick={() => {
+              : <div className='flex align-center justify-between py-3' key={e.ID}>
+                <li className='text-left ps-3' onClick={() => {
                   setEditValue(e.Title)
                   handleOpenEdit(e.ID)
-                }} key={e.ID}>
-                <li className='text-left ps-3'>{e.Title}</li>
+                }} >{e.Title}</li>
                 <div className='flex items-center gap-3'>
                   {e.Status == 'active' ?
-                    <div className="badge badge-success text-white">
+                    <div className="badge badge-success text-white" onClick={() => handleChangeStatus(e.ID, 'inactive')}>
                       Done
                     </div> :
-                    <div className="badge badge-outline">
+                    <div className="badge badge-outline" onClick={() => handleChangeStatus(e.ID, 'active')}>
                       To Do
                     </div>
                   }

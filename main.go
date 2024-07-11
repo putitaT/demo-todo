@@ -90,7 +90,7 @@ func main() {
 }
 
 func getTodosHandler(ctx *gin.Context) {
-	rows, err := db.Query("SELECT id, title, status FROM todos")
+	rows, err := db.Query("SELECT id, title, status FROM todos ORDER BY id")
 	if err != nil {
 		log.Fatal("can't query all todos", err)
 	}
